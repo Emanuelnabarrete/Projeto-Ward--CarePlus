@@ -10,6 +10,7 @@ from datetime import datetime
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
+from dotenv import load_dotenv
 
 # ─── MediaPipe Pose (postura) ─────────────────────────────────────────────────
 mp_pose = mp.solutions.pose
@@ -444,7 +445,8 @@ finally:
 # ════════════════════════════════════════════════════════════════════════════════
 
 if registros:
-    pasta = os.path.dirname(os.path.abspath(__file__))
+    pasta = os.path.join(os.path.dirname(os.path.abspath(__file__)), "outputs")
+    os.makedirs(pasta, exist_ok=True)
     ts    = datetime.now().strftime("%Y%m%d_%H%M%S")
 
     df = pd.DataFrame(registros)

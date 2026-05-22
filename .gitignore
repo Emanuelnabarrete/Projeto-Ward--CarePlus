@@ -1,8 +1,9 @@
-﻿.venv/
-.venv_clean/
+﻿.venv_clean/
+.venv/
 .env
 *.csv
 *.xlsx
 *.txt
 __pycache__/
 *.pyc
+.idea/

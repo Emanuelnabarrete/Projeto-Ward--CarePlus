@@ -1,6 +1,7 @@
 @echo off
+cd /d C:\Ward
 IF NOT EXIST .venv (
-    echo Execute setup.bat primeiro!
-    pause & exit /b 1
+    echo Ambiente nao encontrado. Rodando setup...
+    call setup.bat
 )
 .venv\Scripts\python.exe main.py

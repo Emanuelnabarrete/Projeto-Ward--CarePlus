@@ -1,0 +1,169 @@
+[
+  {
+    "descricao": "Postura boa, piscadas normais, emoção negativa",
+    "dados": {
+      "postura": "BOA POSTURA",
+      "score_postura": 10.0,
+      "piscadas_por_minuto": 17,
+      "emocao": "sad"
+    },
+    "calculo": {
+      "score_postura_pts": 100,
+      "score_piscadas_pts": 100,
+      "score_emocao_pts": 0,
+      "score_final": 80.0
+    },
+    "classificacao": "MUITO BOM",
+    "dicas_esperadas": [
+      "Sua postura está excelente, continue assim",
+      "Frequência de piscadas ideal, seus olhos estão sendo bem cuidados",
+      "Detectamos sinais de tristeza durante a sessão, considere fazer uma pausa ou conversar com alguém de confiança"
+    ]
+  },
+  {
+    "descricao": "Postura ruim, piscadas normais, emoção positiva",
+    "dados": {
+      "postura": "MA POSTURA",
+      "score_postura": 85.0,
+      "piscadas_por_minuto": 18,
+      "emocao": "happy"
+    },
+    "calculo": {
+      "score_postura_pts": 0,
+      "score_piscadas_pts": 100,
+      "score_emocao_pts": 100,
+      "score_final": 50.0
+    },
+    "classificacao": "MEDIANO",
+    "dicas_esperadas": [
+      "Sua postura está inadequada, tente manter a coluna ereta e os ombros alinhados",
+      "Considere ajustar a altura da cadeira ou monitor",
+      "Seu estado emocional e piscadas estão ótimos, foque em corrigir a postura"
+    ]
+  },
+  {
+    "descricao": "Postura regular, piscadas baixas, emoção neutra",
+    "dados": {
+      "postura": "POSTURA REGULAR",
+      "score_postura": 35.0,
+      "piscadas_por_minuto": 8,
+      "emocao": "neutral"
+    },
+    "calculo": {
+      "score_postura_pts": 50,
+      "score_piscadas_pts": 0,
+      "score_emocao_pts": 100,
+      "score_final": 45.0
+    },
+    "classificacao": "MEDIANO",
+    "dicas_esperadas": [
+      "Sua postura precisa de atenção, procure sentar com a coluna apoiada",
+      "Você piscou pouco durante a sessão, isso pode causar ressecamento ocular, lembre-se de piscar com mais frequência",
+      "Considere a regra 20-20-20: a cada 20 minutos, olhe para algo a 20 pés por 20 segundos"
+    ]
+  },
+  {
+    "descricao": "Postura boa, piscadas altas, emoção negativa",
+    "dados": {
+      "postura": "BOA POSTURA",
+      "score_postura": 12.0,
+      "piscadas_por_minuto": 27,
+      "emocao": "angry"
+    },
+    "calculo": {
+      "score_postura_pts": 100,
+      "score_piscadas_pts": 0,
+      "score_emocao_pts": 0,
+      "score_final": 50.0
+    },
+    "classificacao": "MEDIANO",
+    "dicas_esperadas": [
+      "Sua postura está excelente",
+      "Você piscou mais que o normal, isso pode indicar irritação ocular ou cansaço visual",
+      "Detectamos sinais de raiva ou frustração, considere fazer uma pausa ativa de 5 minutos"
+    ]
+  },
+  {
+    "descricao": "Postura ruim, piscadas baixas, emoção negativa",
+    "dados": {
+      "postura": "MA POSTURA",
+      "score_postura": 90.0,
+      "piscadas_por_minuto": 5,
+      "emocao": "disgust"
+    },
+    "calculo": {
+      "score_postura_pts": 0,
+      "score_piscadas_pts": 0,
+      "score_emocao_pts": 0,
+      "score_final": 0.0
+    },
+    "classificacao": "RUIM",
+    "dicas_esperadas": [
+      "Sua postura está muito inadequada durante toda a sessão, ajuste imediatamente a posição da cadeira e monitor",
+      "Você piscou muito pouco, risco real de síndrome do olho seco",
+      "Seu estado emocional esteve negativo durante a sessão, considere encerrar o trabalho e retomar depois de uma pausa"
+    ]
+  },
+  {
+    "descricao": "Postura regular, piscadas normais, emoção de medo",
+    "dados": {
+      "postura": "POSTURA REGULAR",
+      "score_postura": 40.0,
+      "piscadas_por_minuto": 16,
+      "emocao": "fear"
+    },
+    "calculo": {
+      "score_postura_pts": 50,
+      "score_piscadas_pts": 100,
+      "score_emocao_pts": 50,
+      "score_final": 65.0
+    },
+    "classificacao": "MEDIANO",
+    "dicas_esperadas": [
+      "Sua postura pode melhorar, tente manter os pés apoiados no chão e a tela na altura dos olhos",
+      "Frequência de piscadas dentro do ideal",
+      "Detectamos sinais de ansiedade ou medo, considere técnicas de respiração antes de continuar"
+    ]
+  },
+  {
+    "descricao": "Tudo muito bom",
+    "dados": {
+      "postura": "BOA POSTURA",
+      "score_postura": 8.0,
+      "piscadas_por_minuto": 17,
+      "emocao": "happy"
+    },
+    "calculo": {
+      "score_postura_pts": 100,
+      "score_piscadas_pts": 100,
+      "score_emocao_pts": 100,
+      "score_final": 100.0
+    },
+    "classificacao": "MUITO BOM",
+    "dicas_esperadas": [
+      "Sessão excelente! Postura, piscadas e estado emocional dentro do ideal",
+      "Continue mantendo esses hábitos durante sua jornada de trabalho"
+    ]
+  },
+  {
+    "descricao": "Postura boa, piscadas baixas, emocao surpresa",
+    "dados": {
+      "postura": "BOA POSTURA",
+      "score_postura": 15.0,
+      "piscadas_por_minuto": 9,
+      "emocao": "surprise"
+    },
+    "calculo": {
+      "score_postura_pts": 100,
+      "score_piscadas_pts": 0,
+      "score_emocao_pts": 50,
+      "score_final": 60.0
+    },
+    "classificacao": "MEDIANO",
+    "dicas_esperadas": [
+      "Postura excelente durante a sessão",
+      "Você piscou pouco, lembre-se de piscar conscientemente ao usar telas por longos períodos",
+      "Estado emocional estável, mas fique atento ao cansaço visual"
+    ]
+  }
+]

@@ -1,16 +1,34 @@
 import cv2
+import re
 import mediapipe as mp
 import math
 import time
 import os
 import threading
 import pandas as pd
+import requests
+import json
 from fer import FER
 from datetime import datetime
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 from dotenv import load_dotenv
+
+load_dotenv()
+
+OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+MODEL       = os.getenv("MODEL", "llama3")
+
+SYSTEM_PROMPT_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "prompts", "system_prompt.txt")
+
+def carregar_system_prompt():
+    try:
+        with open(SYSTEM_PROMPT_PATH, "r", encoding="utf-8") as f:
+            return f.read()
+    except FileNotFoundError:
+        print("⚠️  system_prompt.txt não encontrado em prompts/")
+        return ""
 
 # ─── MediaPipe Pose (postura) ─────────────────────────────────────────────────
 mp_pose = mp.solutions.pose
@@ -29,7 +47,7 @@ EAR_THRESH     = 0.20
 FRAMES_FECHADO = 2
 
 # ─── FER (emoção) ─────────────────────────────────────────────────────────────
-fer_detector = FER(mtcnn=False)   # mtcnn=False → usa OpenCV, sem conflito com TF
+fer_detector = FER(mtcnn=False)
 
 EMOCAO_EMOJI = {
     "happy":    "FELIZ",
@@ -167,8 +185,8 @@ def _thread_emocao():
         try:
             resultado = fer_detector.detect_emotions(frame)
             if resultado:
-                rosto    = max(resultado, key=lambda r: r["box"][2] * r["box"][3])
-                scores   = rosto["emotions"]
+                rosto     = max(resultado, key=lambda r: r["box"][2] * r["box"][3])
+                scores    = rosto["emotions"]
                 dominante = max(scores, key=scores.get)
                 with _emocao_lock:
                     EMOCAO_ATUAL  = dominante
@@ -190,12 +208,112 @@ def parar_thread_emocao():
 
 
 # ════════════════════════════════════════════════════════════════════════════════
+#  OLLAMA — ANÁLISE WARD
+# ════════════════════════════════════════════════════════════════════════════════
+
+def preparar_dados_sessao(df, piscadas_sessao_total):
+    total = len(df)
+    duracao_min = (total * INTERVALO_REGISTRO) / 60
+
+    postura_predominante = df["postura"].value_counts().idxmax()
+    score_postura_medio  = round(df["score"].mean(), 1)
+    piscadas_por_minuto  = round(piscadas_sessao_total * 6, 1) if duracao_min > 0 else 0
+    emocao_predominante  = df["emocao"].value_counts().idxmax()
+
+    return {
+        "postura":               postura_predominante,
+        "score_postura":         score_postura_medio,
+        "piscadas_por_minuto":   piscadas_por_minuto,
+        "emocao":                emocao_predominante,
+        "duracao_minutos":       round(duracao_min, 1),
+        "total_registros":       total,
+    }
+
+
+def analisar_com_ward(dados_sessao):
+    system_prompt = carregar_system_prompt()
+    if not system_prompt:
+        return None
+
+    mensagem = f"""<dados_sessao>
+{json.dumps(dados_sessao, ensure_ascii=False, indent=2)}
+</dados_sessao>"""
+
+    print("\n⏳ Enviando dados para o Ward (Ollama)...")
+
+    try:
+        response = requests.post(
+            f"{OLLAMA_HOST}/api/chat",
+            json={
+                "model":  MODEL,
+                "stream": False,
+                "messages": [
+                    {"role": "system",  "content": system_prompt},
+                    {"role": "user",    "content": mensagem},
+                ]
+            },
+            timeout=120
+        )
+        response.raise_for_status()
+        conteudo = response.json()["message"]["content"]
+
+        conteudo_limpo = conteudo.strip()
+
+        if "```" in conteudo_limpo:
+            conteudo_limpo = re.sub(r"```(?:json)?", "", conteudo_limpo).strip()
+
+        match = re.search(r"\{.*\}", conteudo_limpo, re.DOTALL)
+        if not match:
+            raise json.JSONDecodeError("JSON não encontrado na resposta", conteudo_limpo, 0)
+
+        return json.loads(match.group())
+
+    except requests.exceptions.ConnectionError:
+        print(f"❌ Não foi possível conectar ao Ollama em {OLLAMA_HOST}")
+        print("   Verifique se o Ollama está rodando: ollama serve")
+        return None
+    except requests.exceptions.Timeout:
+        print("❌ Timeout na conexão com o Ollama (120s)")
+        return None
+    except json.JSONDecodeError as e:
+        print(f"❌ Erro ao interpretar resposta do Ward: {e}")
+        print(f"   Resposta recebida: {conteudo[:300]}")
+        return None
+    except Exception as e:
+        print(f"❌ Erro inesperado na análise Ward: {e}")
+        return None
+
+
+def exibir_analise_terminal(analise, dados_sessao):
+    sep = "═" * 55
+    print(f"\n{sep}")
+    print("  ANÁLISE WARD — BEM-ESTAR OCUPACIONAL")
+    print(sep)
+    print(f"  Score Final    : {analise.get('score_final', '?')}/100")
+    print(f"  Classificação  : {analise.get('classificacao', '?')}")
+    print(f"  Duração        : {dados_sessao.get('duracao_minutos', '?')} minutos")
+    print(f"  Registros      : {dados_sessao.get('total_registros', '?')}")
+    print(f"\n  {analise.get('resumo', '')}")
+
+    print(f"\n── Análise por fator ──")
+    analise_fatores = analise.get("analise", {})
+    print(f"  Postura  : {analise_fatores.get('postura', '?')}")
+    print(f"  Piscadas : {analise_fatores.get('piscadas', '?')}")
+    print(f"  Emoção   : {analise_fatores.get('emocao', '?')}")
+
+    print(f"\n── Recomendações ──")
+    for i, dica in enumerate(analise.get("recomendacoes", []), 1):
+        print(f"  {i}. {dica}")
+
+    print(sep + "\n")
+
+
+# ════════════════════════════════════════════════════════════════════════════════
 #  OVERLAY
 # ════════════════════════════════════════════════════════════════════════════════
 
 def desenhar_overlay(frame, m_smooth, score, postura, cor, baseline,
                      pisc_sessao, pisc_intervalo, olhos_fech, ear, emocao, e_scores, h, w):
-    # Postura
     cv2.putText(frame, postura, (50, 55), cv2.FONT_HERSHEY_SIMPLEX, 0.9, cor, 2)
     bx, by, bw, bh = 50, 75, 200, 16
     cv2.rectangle(frame, (bx, by), (bx+bw, by+bh), (50,50,50), -1)
@@ -203,18 +321,15 @@ def desenhar_overlay(frame, m_smooth, score, postura, cor, baseline,
     cv2.rectangle(frame, (bx, by), (bx+bw, by+bh), (160,160,160), 1)
     cv2.putText(frame, f"Score: {int(score)}/100", (bx, by-4), cv2.FONT_HERSHEY_SIMPLEX, 0.48, (200,200,200), 1)
 
-    # Piscadas
     c_olho = (0,60,255) if olhos_fech else (0,200,80)
     cv2.putText(frame, f"Olhos: {'FECHADOS' if olhos_fech else 'ABERTOS'}  EAR:{ear:.2f}",
                 (50,120), cv2.FONT_HERSHEY_SIMPLEX, 0.65, c_olho, 2)
-    cv2.putText(frame, f"Piscadas sessao: {pisc_sessao}",    (50,148), cv2.FONT_HERSHEY_SIMPLEX, 0.58, (200,200,200), 1)
+    cv2.putText(frame, f"Piscadas sessao: {pisc_sessao}",       (50,148), cv2.FONT_HERSHEY_SIMPLEX, 0.58, (200,200,200), 1)
     cv2.putText(frame, f"Piscadas intervalo: {pisc_intervalo}", (50,172), cv2.FONT_HERSHEY_SIMPLEX, 0.58, (200,200,200), 1)
 
-    # Emoção
     label = EMOCAO_EMOJI.get(emocao, emocao.upper())
     cv2.putText(frame, f"Feicao: {label}", (50,200), cv2.FONT_HERSHEY_SIMPLEX, 0.72, (255,200,50), 2)
 
-    # Barras de emoção (canto direito)
     if e_scores:
         ex, ey = w-230, 40
         cv2.rectangle(frame, (ex-5, ey-20), (w-10, ey+len(e_scores)*22+5), (30,30,30), -1)
@@ -225,7 +340,6 @@ def desenhar_overlay(frame, m_smooth, score, postura, cor, baseline,
             cv2.putText(frame, f"{emo[:7]:<7} {val:5.1f}%",
                         (ex, ey+i*22+13), cv2.FONT_HERSHEY_SIMPLEX, 0.42, (220,220,220), 1)
 
-    # Métricas debug
     y0 = 232
     for k, v in m_smooth.items():
         cv2.putText(frame, f"{k}: {v:.4f}  (base:{baseline.get(k,0):.4f})",
@@ -237,7 +351,7 @@ def desenhar_overlay(frame, m_smooth, score, postura, cor, baseline,
 #  EXCEL
 # ════════════════════════════════════════════════════════════════════════════════
 
-def gerar_excel(registros, caminho):
+def gerar_excel(registros, caminho, analise_ward=None):
     wb  = Workbook()
     ws  = wb.active
     ws.title = "Monitoramento de Postura"
@@ -289,6 +403,49 @@ def gerar_excel(registros, caminho):
             c.alignment=Alignment(horizontal="center"); c.border=borda
     for col,cw in zip(["A","B","C","D"],[22,12,12,18]):
         ws2.column_dimensions[col].width=cw
+
+    # Aba Ward
+    if analise_ward:
+        ws3 = wb.create_sheet("Analise Ward")
+        ws3.column_dimensions["A"].width = 22
+        ws3.column_dimensions["B"].width = 60
+
+        itens = [
+            ("Score Final",     analise_ward.get("score_final", "?")),
+            ("Classificação",   analise_ward.get("classificacao", "?")),
+            ("Resumo",          analise_ward.get("resumo", "?")),
+            ("Análise Postura", analise_ward.get("analise", {}).get("postura", "?")),
+            ("Análise Piscadas",analise_ward.get("analise", {}).get("piscadas", "?")),
+            ("Análise Emoção",  analise_ward.get("analise", {}).get("emocao", "?")),
+        ]
+        for i, (chave, valor) in enumerate(itens, 1):
+            ca = ws3.cell(row=i, column=1, value=chave)
+            ca.font = Font(name="Arial", bold=True, size=10)
+            ca.fill = PatternFill("solid", start_color=COR_HDR)
+            ca.font = Font(name="Arial", bold=True, color="FFFFFF", size=10)
+            ca.alignment = Alignment(horizontal="left", vertical="center")
+            ca.border = borda
+
+            cb = ws3.cell(row=i, column=2, value=str(valor))
+            cb.font = Font(name="Arial", size=10)
+            cb.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
+            cb.border = borda
+            ws3.row_dimensions[i].height = 40
+
+        recomendacoes = analise_ward.get("recomendacoes", [])
+        for j, rec in enumerate(recomendacoes, len(itens)+1):
+            ca = ws3.cell(row=j, column=1, value=f"Recomendação {j - len(itens)}")
+            ca.font = Font(name="Arial", bold=True, color="FFFFFF", size=10)
+            ca.fill = PatternFill("solid", start_color="059669")
+            ca.alignment = Alignment(horizontal="left", vertical="center")
+            ca.border = borda
+
+            cb = ws3.cell(row=j, column=2, value=rec)
+            cb.font = Font(name="Arial", size=10)
+            cb.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
+            cb.border = borda
+            ws3.row_dimensions[j].height = 40
+
     ws.freeze_panes="A2"
     wb.save(caminho)
     print(f"✅ Excel salvo em: {caminho}")
@@ -356,14 +513,12 @@ try:
                 cv2.putText(frame, f"Tempo ruim: {elapsed}s",
                             (50, h-50), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0,60,255), 2)
 
-        # Emoção — envia frame para thread e lê resultado
         with _emocao_lock:
             EMOCAO_FRAME_BGR = frame.copy()
         with _emocao_lock:
             emocao_agora = EMOCAO_ATUAL
             scores_agora = dict(EMOCAO_SCORES)
 
-        # Piscadas
         ear_atual, fechado_agora, lm_px = processar_piscada(frame_rgb, h, w)
         if lm_px:
             for idx in RIGHT_EYE + LEFT_EYE:
@@ -377,20 +532,17 @@ try:
             frames_olho_fechado = 0
         olhos_fechados = fechado_agora
 
-        # Overlay
         if not CALIBRANDO and results.pose_landmarks:
             desenhar_overlay(frame, m_smooth, score_atual, postura_atual, cor,
                              calib_baseline, piscadas_sessao, piscadas_intervalo,
                              olhos_fechados, ear_atual, emocao_agora, scores_agora, h, w)
 
-        # HUD inferior
         tempo_prox = INTERVALO_REGISTRO - int(agora - ultimo_registro)
         cv2.putText(frame, f"Prox. registro: {tempo_prox}s | Registros: {len(registros)}",
                     (50, h-20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (170,170,170), 1)
         cv2.putText(frame, "R=recalibrar | Q=sair",
                     (w-240, h-20), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (170,170,170), 1)
 
-        # Registro periódico
         if (not CALIBRANDO and agora-ultimo_registro >= INTERVALO_REGISTRO
                 and postura_atual != "SEM DETECCAO"):
             now_dt = datetime.now()
@@ -441,19 +593,40 @@ finally:
     cv2.destroyAllWindows()
 
 # ════════════════════════════════════════════════════════════════════════════════
-#  EXPORTAÇÃO FINAL
+#  EXPORTAÇÃO FINAL + ANÁLISE WARD
 # ════════════════════════════════════════════════════════════════════════════════
 
 if registros:
     pasta = os.path.join(os.path.dirname(os.path.abspath(__file__)), "outputs")
     os.makedirs(pasta, exist_ok=True)
-    ts    = datetime.now().strftime("%Y%m%d_%H%M%S")
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
 
     df = pd.DataFrame(registros)
+
+    # ── Análise Ward ──────────────────────────────────────────────────────────
+    analise_ward  = None
+    score_ward    = None
+    classificacao_ward = None
+
+    dados_sessao = preparar_dados_sessao(df, piscadas_sessao)
+    analise_ward = analisar_com_ward(dados_sessao)
+
+    if analise_ward:
+        score_ward         = analise_ward.get("score_final")
+        classificacao_ward = analise_ward.get("classificacao")
+        exibir_analise_terminal(analise_ward, dados_sessao)
+    else:
+        print("⚠️  Análise Ward não disponível. Exportando sem score Ward.")
+
+    # ── Score Ward no CSV ─────────────────────────────────────────────────────
+    df["score_ward"]         = score_ward
+    df["classificacao_ward"] = classificacao_ward
+
     caminho_csv = os.path.join(pasta, f"postura_{ts}.csv")
     df.to_csv(caminho_csv, index=False, encoding="utf-8-sig")
     print(f"✅ CSV salvo em: {caminho_csv}")
 
+    # ── TXT ───────────────────────────────────────────────────────────────────
     caminho_txt = os.path.join(pasta, f"postura_{ts}.txt")
     total = len(df)
     with open(caminho_txt, "w", encoding="utf-8") as f:
@@ -461,8 +634,16 @@ if registros:
         f.write(f"Gerado em          : {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}\n")
         f.write(f"Total de registros : {total}\n")
         f.write(f"Score medio        : {df['score'].mean():.1f}/100\n")
-        f.write(f"Total de piscadas  : {piscadas_sessao}\n\n")
-        f.write("── Distribuicao de emocoes ──\n")
+        f.write(f"Total de piscadas  : {piscadas_sessao}\n")
+        if score_ward:
+            f.write(f"\n── Análise Ward ──\n")
+            f.write(f"  Score Ward     : {score_ward}/100\n")
+            f.write(f"  Classificação  : {classificacao_ward}\n")
+            f.write(f"  Resumo         : {analise_ward.get('resumo','')}\n")
+            f.write(f"\n  Recomendações:\n")
+            for i, rec in enumerate(analise_ward.get("recomendacoes", []), 1):
+                f.write(f"  {i}. {rec}\n")
+        f.write("\n── Distribuicao de emocoes ──\n")
         emos = [r.get("emocao","?") for r in registros]
         for emo in sorted(set(emos)):
             qtd = emos.count(emo)
@@ -477,8 +658,9 @@ if registros:
                     f"piscadas={int(row['piscadas'])}  emocao={row.get('emocao','?')}\n")
     print(f"✅ TXT salvo em: {caminho_txt}")
 
+    # ── Excel ─────────────────────────────────────────────────────────────────
     caminho_xlsx = os.path.join(pasta, f"postura_{ts}.xlsx")
-    gerar_excel(registros, caminho_xlsx)
+    gerar_excel(registros, caminho_xlsx, analise_ward=analise_ward)
 
     try:
         if os.name == "nt":

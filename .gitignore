@@ -1,5 +1,5 @@
-﻿.venv_clean/
-.venv/
+﻿.venv/
+.venv_clean/
 .env
 *.csv
 *.xlsx

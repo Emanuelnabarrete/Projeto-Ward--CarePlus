@@ -15,6 +15,14 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 from dotenv import load_dotenv
 
+import django
+from django.conf import settings as django_settings
+
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "core.settings")
+django.setup()
+
+from monitor.models import SessaoWard
+
 load_dotenv()
 
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
@@ -217,7 +225,7 @@ def preparar_dados_sessao(df, piscadas_sessao_total):
 
     postura_predominante = df["postura"].value_counts().idxmax()
     score_postura_medio  = round(df["score"].mean(), 1)
-    piscadas_por_minuto  = round(piscadas_sessao_total * 6, 1) if duracao_min > 0 else 0
+    piscadas_por_minuto = round(piscadas_sessao_total / duracao_min, 1) if duracao_min > 0 else 0
     emocao_predominante  = df["emocao"].value_counts().idxmax()
 
     return {
@@ -307,6 +315,30 @@ def exibir_analise_terminal(analise, dados_sessao):
 
     print(sep + "\n")
 
+
+def salvar_no_banco(analise, dados_sessao):
+    try:
+        recomendacoes = analise.get("recomendacoes", [])
+        SessaoWard.objects.create(
+            duracao_minutos        = dados_sessao.get("duracao_minutos", 0),
+            total_registros        = dados_sessao.get("total_registros", 0),
+            postura_predominante   = dados_sessao.get("postura", ""),
+            score_postura_medio    = dados_sessao.get("score_postura", 0),
+            piscadas_por_minuto    = dados_sessao.get("piscadas_por_minuto", 0),
+            emocao_predominante    = dados_sessao.get("emocao", ""),
+            score_ward             = analise.get("score_final", 0),
+            classificacao_ward     = analise.get("classificacao", ""),
+            resumo                 = analise.get("resumo", ""),
+            analise_postura        = analise.get("analise", {}).get("postura", ""),
+            analise_piscadas       = analise.get("analise", {}).get("piscadas", ""),
+            analise_emocao         = analise.get("analise", {}).get("emocao", ""),
+            recomendacao_1         = recomendacoes[0] if len(recomendacoes) > 0 else "",
+            recomendacao_2         = recomendacoes[1] if len(recomendacoes) > 1 else None,
+            recomendacao_3         = recomendacoes[2] if len(recomendacoes) > 2 else None,
+        )
+        print("✅ Análise salva no banco de dados.")
+    except Exception as e:
+        print(f"❌ Erro ao salvar no banco: {e}")
 
 # ════════════════════════════════════════════════════════════════════════════════
 #  OVERLAY
@@ -615,6 +647,7 @@ if registros:
         score_ward         = analise_ward.get("score_final")
         classificacao_ward = analise_ward.get("classificacao")
         exibir_analise_terminal(analise_ward, dados_sessao)
+        salvar_no_banco(analise_ward, dados_sessao)
     else:
         print("⚠️  Análise Ward não disponível. Exportando sem score Ward.")
 
